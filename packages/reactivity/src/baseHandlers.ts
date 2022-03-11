@@ -79,8 +79,10 @@ function createArrayInstrumentations() {
   return instrumentations
 }
 
+// getter
 function createGetter(isReadonly = false, shallow = false) {
   return function get(target: Target, key: string | symbol, receiver: object) {
+    // 各种内置属性的判断
     if (key === ReactiveFlags.IS_REACTIVE) {
       return !isReadonly
     } else if (key === ReactiveFlags.IS_READONLY) {
@@ -101,13 +103,14 @@ function createGetter(isReadonly = false, shallow = false) {
     ) {
       return target
     }
-
     const targetIsArray = isArray(target)
 
+    // 如果代理的是个数组的话
     if (!isReadonly && targetIsArray && hasOwn(arrayInstrumentations, key)) {
       return Reflect.get(arrayInstrumentations, key, receiver)
     }
 
+    // 从这里开始是我们正常使用的逻辑
     const res = Reflect.get(target, key, receiver)
 
     if (isSymbol(key) ? builtInSymbols.has(key) : isNonTrackableKeys(key)) {
@@ -115,9 +118,11 @@ function createGetter(isReadonly = false, shallow = false) {
     }
 
     if (!isReadonly) {
+      // 如果不是readOnly，我们就来到了这里，嘿嘿
       track(target, TrackOpTypes.GET, key)
     }
 
+    // 如果是浅监听，那么直接byebye
     if (shallow) {
       return res
     }
@@ -132,6 +137,10 @@ function createGetter(isReadonly = false, shallow = false) {
       // Convert returned value into a proxy as well. we do the isObject check
       // here to avoid invalid value warning. Also need to lazy access readonly
       // and reactive here to avoid circular dependency.
+      // 将返回值也进行代理，我们这里做isObject检查是为了避免无效值警告
+      // 同事我们需要惰性访问只读和响应式来避免循环依赖
+      // 在getter中，也就是访问的时候才去递归响应式，而不是像vue2一样一开始就无脑把data属性无脑进行递归，
+      // 这样在很大程度上提升了性能
       return isReadonly ? readonly(res) : reactive(res)
     }
 

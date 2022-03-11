@@ -3,7 +3,7 @@
   "version": "3.2.31",
   "scripts": {
     "dev": "node scripts/dev.js",
-    "build": "node scripts/build.js",
+    "build": "node scripts/build.js --sourcemap",
     "size": "run-s size-global size-baseline",
     "size-global": "node scripts/build.js vue runtime-dom -f global -p",
     "size-baseline": "node scripts/build.js runtime-dom runtime-core reactivity shared -f esm-bundler && cd packages/size-check && vite build && node brotli",

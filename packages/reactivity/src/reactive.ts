@@ -89,6 +89,7 @@ export type UnwrapNestedRefs<T> = T extends Ref ? T : UnwrapRefSimple<T>
 export function reactive<T extends object>(target: T): UnwrapNestedRefs<T>
 export function reactive(target: object) {
   // if trying to observe a readonly proxy, return the readonly version.
+  // 如果尝试监听readonly的proxy,直接返回
   if (isReadonly(target)) {
     return target
   }
@@ -185,6 +186,7 @@ function createReactiveObject(
   collectionHandlers: ProxyHandler<any>,
   proxyMap: WeakMap<Target, any>
 ) {
+  // 如果不是对象的话，开发环境要给提示，不能响应式
   if (!isObject(target)) {
     if (__DEV__) {
       console.warn(`value cannot be made reactive: ${String(target)}`)
@@ -193,6 +195,8 @@ function createReactiveObject(
   }
   // target is already a Proxy, return it.
   // exception: calling readonly() on a reactive object
+  // 如果本身就是一个Proxy对象的话，则不能代理
+  // 例外情况：对reactive对象调用了readonly方法
   if (
     target[ReactiveFlags.RAW] &&
     !(isReadonly && target[ReactiveFlags.IS_REACTIVE])
@@ -200,17 +204,21 @@ function createReactiveObject(
     return target
   }
   // target already has corresponding Proxy
+  // 已经是相应的响应式对象了，直接返回
   const existingProxy = proxyMap.get(target)
   if (existingProxy) {
     return existingProxy
   }
   // only a whitelist of value types can be observed.
+  // 只有白名单的类型才可以被监听，如case Object,Array,Map,Set,WeakMap,WeakSet
   const targetType = getTargetType(target)
   if (targetType === TargetType.INVALID) {
     return target
   }
+  // 真正的代理开始
   const proxy = new Proxy(
     target,
+    // Map,Set,WeakMap,WeakSet 和 Object,Array走两种不同的代理
     targetType === TargetType.COLLECTION ? collectionHandlers : baseHandlers
   )
   proxyMap.set(target, proxy)

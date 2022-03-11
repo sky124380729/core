@@ -19,11 +19,15 @@ type KeyToDepMap = Map<any, Dep>
 const targetMap = new WeakMap<any, KeyToDepMap>()
 
 // The number of effects currently being tracked recursively.
+// 当前副作用被递归跟踪的次数
 let effectTrackDepth = 0
 
 export let trackOpBit = 1
 
 /**
+ * 按位跟踪标记最多支持30级递归
+ * 这个值是为了使现代JS能够在所有平台上使用SMI
+ * 当递归超过这个深度的时候，回退使用完全清理
  * The bitwise track markers support at most 30 levels of recursion.
  * This value is chosen to enable modern JS engines to use a SMI on all platforms.
  * When recursion depth is greater, fall back to using a full cleanup.
@@ -200,12 +204,21 @@ export function resetTracking() {
 }
 
 export function track(target: object, type: TrackOpTypes, key: unknown) {
+  // 如果有activeEffect的话，去执行
   if (shouldTrack && activeEffect) {
+    // targetMap就是weakMap的实例
     let depsMap = targetMap.get(target)
     if (!depsMap) {
       targetMap.set(target, (depsMap = new Map()))
     }
     let dep = depsMap.get(key)
+    // createDep的定义在这里，本质上其实就是个set集合
+    /* export const createDep = (effects?: ReactiveEffect[]): Dep => {
+      const dep = new Set<ReactiveEffect>(effects) as Dep
+      dep.w = 0
+      dep.n = 0
+      return dep
+    } */
     if (!dep) {
       depsMap.set(key, (dep = createDep()))
     }
@@ -223,6 +236,7 @@ export function trackEffects(
   debuggerEventExtraInfo?: DebuggerEventExtraInfo
 ) {
   let shouldTrack = false
+  // 如果当前副作用被递归跟踪次数小于30
   if (effectTrackDepth <= maxMarkerBits) {
     if (!newTracked(dep)) {
       dep.n |= trackOpBit // set newly tracked
@@ -230,6 +244,7 @@ export function trackEffects(
     }
   } else {
     // Full cleanup mode.
+    // 否则采用完全清理模式
     shouldTrack = !dep.has(activeEffect!)
   }
 
