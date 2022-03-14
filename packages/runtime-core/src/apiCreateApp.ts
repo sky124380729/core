@@ -178,6 +178,7 @@ export function createAppAPI<HostElement>(
   render: RootRenderFunction,
   hydrate?: RootHydrateFunction
 ): CreateAppFunction<HostElement> {
+  // createApp createApp 方法接受的两个参数：根组件的对象和 prop
   return function createApp(rootComponent, rootProps = null) {
     if (rootProps != null && !isObject(rootProps)) {
       __DEV__ && warn(`root props passed to app.mount() must be an object.`)
@@ -274,12 +275,16 @@ export function createAppAPI<HostElement>(
         return app
       },
 
+      // 标准化的跨平台渲染流程是先创建vnode，再渲染vnode。此外参数rootContainer也可以是不同类型的值，比如，在web平台它是一个dom对象，而在其他
+      // 平台（比如Weex和小程序）中可以是其他类型的值。所以这里面的代码不应该包含任何特定平台相关的逻辑，也就是说这些代码的执行逻辑都是与平台无关的。
+      // 因此我们需要在外部重写这个方法，来完善下Web凭条下的渲染逻辑
       mount(
         rootContainer: HostElement,
         isHydrate?: boolean,
         isSVG?: boolean
       ): any {
         if (!isMounted) {
+          // 创建根组件的vnode
           const vnode = createVNode(
             rootComponent as ConcreteComponent,
             rootProps
@@ -298,6 +303,7 @@ export function createAppAPI<HostElement>(
           if (isHydrate && hydrate) {
             hydrate(vnode as VNode<Node, Element>, rootContainer as any)
           } else {
+            // 利用渲染器渲染vnode
             render(vnode, rootContainer, isSVG)
           }
           isMounted = true
