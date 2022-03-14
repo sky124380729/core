@@ -9,13 +9,26 @@
 <body>
     <script src="../dist/reactivity.global.js"></script>
     <script>
-        const { reactive } = VueReactivity
-
+        const { reactive, effect } = VueReactivity
+        
         const obj = reactive({
-            a: 1,
-            b: [{x: 1, y: 2}]
+            a: {
+                x: 1,
+                y: 2
+            },
+            b: {
+                x: 1,
+                y: 2,
+                obj: {
+                    z: 3
+                }
+            }
         })
-        console.log(obj.b)
+
+        effect(() => {
+            console.log(obj.b.obj)
+        })
+        // console.log(obj.b.obj)
     </script>
 </body>
 </html>

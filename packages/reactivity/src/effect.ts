@@ -235,20 +235,29 @@ export function trackEffects(
   dep: Dep,
   debuggerEventExtraInfo?: DebuggerEventExtraInfo
 ) {
+  // 是否需要收集依赖
   let shouldTrack = false
   // 如果当前副作用被递归跟踪次数小于30
   if (effectTrackDepth <= maxMarkerBits) {
+    /**
+     * export const newTracked = (dep: Dep): boolean => (dep.n & trackOpBit) > 0
+     */
     if (!newTracked(dep)) {
       dep.n |= trackOpBit // set newly tracked
+      /**
+       * export const wasTracked = (dep: Dep): boolean => (dep.w & trackOpBit) > 0
+       */
       shouldTrack = !wasTracked(dep)
     }
   } else {
     // Full cleanup mode.
     // 否则采用完全清理模式
+    // 如果没有副作用effect，则表示需要track
     shouldTrack = !dep.has(activeEffect!)
   }
 
   if (shouldTrack) {
+    // 添加依赖
     dep.add(activeEffect!)
     activeEffect!.deps.push(dep)
     if (__DEV__ && activeEffect!.onTrack) {

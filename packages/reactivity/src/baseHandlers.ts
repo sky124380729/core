@@ -50,16 +50,23 @@ function createArrayInstrumentations() {
   const instrumentations: Record<string, Function> = {}
   // instrument identity-sensitive Array methods to account for possible reactive
   // values
+  // 也就是说，当 target 是一个数组的时候，我们去访问 target.includes、target.indexOf 或者 target.lastIndexOf
+  // 就会执行 arrayInstrumentations 代理的函数，除了调用数组本身的方法求值外，还对数组每个元素做了依赖收集。
+  // 因为一旦数组的元素被修改，数组的这几个 API 的返回结果都可能发生变化，所以我们需要跟踪数组每个元素的变化。
   ;(['includes', 'indexOf', 'lastIndexOf'] as const).forEach(key => {
     instrumentations[key] = function (this: unknown[], ...args: unknown[]) {
+      // toRaw 可以把响应式对象转成原始数据
       const arr = toRaw(this) as any
       for (let i = 0, l = this.length; i < l; i++) {
+        // 依赖收集
         track(arr, TrackOpTypes.GET, i + '')
       }
       // we run the method using the original args first (which may be reactive)
+      // 先尝试用参数本身，可能是响应式数据
       const res = arr[key](...args)
       if (res === -1 || res === false) {
         // if that didn't work, run it again using raw values.
+        // 如果失败，再尝试把参数转成原始数据
         return arr[key](...args.map(toRaw))
       } else {
         return res
@@ -113,6 +120,7 @@ function createGetter(isReadonly = false, shallow = false) {
     // 从这里开始是我们正常使用的逻辑
     const res = Reflect.get(target, key, receiver)
 
+    // 内置Symbol key不需要收集依赖
     if (isSymbol(key) ? builtInSymbols.has(key) : isNonTrackableKeys(key)) {
       return res
     }
@@ -138,9 +146,12 @@ function createGetter(isReadonly = false, shallow = false) {
       // here to avoid invalid value warning. Also need to lazy access readonly
       // and reactive here to avoid circular dependency.
       // 将返回值也进行代理，我们这里做isObject检查是为了避免无效值警告
-      // 同事我们需要惰性访问只读和响应式来避免循环依赖
-      // 在getter中，也就是访问的时候才去递归响应式，而不是像vue2一样一开始就无脑把data属性无脑进行递归，
-      // 这样在很大程度上提升了性能
+      // 同时我们需要惰性访问只读和响应式来避免循环依赖
+      // 函数最后会对计算的值 res 进行判断，如果它也是数组或对象，则递归执行 reactive 把 res 变成响应式对象。
+      // 这么做是因为 Proxy 劫持的是对象本身，并不能劫持子对象的变化，这点和 Object.defineProperty API 一致。
+      // 但是 Object.defineProperty 是在初始化阶段，即定义劫持对象的时候就已经递归执行了，
+      // 而 Proxy 是在对象属性被访问的时候才递归执行下一步 reactive，
+      // 这其实是一种延时定义子对象响应式的实现，在性能上会有较大的提升。
       return isReadonly ? readonly(res) : reactive(res)
     }
 

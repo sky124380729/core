@@ -687,6 +687,7 @@ export function handleSetupResult(
   setupResult: unknown,
   isSSR: boolean
 ) {
+  // 如果setup是返回渲染函数
   if (isFunction(setupResult)) {
     // setup returned an inline render function
     if (__SSR__ && (instance.type as ComponentOptions).__ssrInlineRender) {
@@ -694,8 +695,10 @@ export function handleSetupResult(
       // set it as ssrRender instead.
       instance.ssrRender = setupResult
     } else {
+      // 把返回值给instance.render
       instance.render = setupResult as InternalRenderFunction
     }
+    // 如果返回值是对象
   } else if (isObject(setupResult)) {
     if (__DEV__ && isVNode(setupResult)) {
       warn(
@@ -708,6 +711,7 @@ export function handleSetupResult(
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       instance.devtoolsRawSetupState = setupResult
     }
+    // 把setup结果变成响应式
     instance.setupState = proxyRefs(setupResult)
     if (__DEV__) {
       exposeSetupStateOnRenderContext(instance)
