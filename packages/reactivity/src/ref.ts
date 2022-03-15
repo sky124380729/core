@@ -61,6 +61,7 @@ export function triggerRefValue(ref: RefBase<any>, newVal?: any) {
 
 export function isRef<T>(r: Ref<T> | unknown): r is Ref<T>
 export function isRef(r: any): r is Ref {
+  // 判断当前对象是否有__v_isRef属性，有的话就是ref对象
   return !!(r && r.__v_isRef === true)
 }
 
@@ -70,6 +71,7 @@ export function ref<T extends object>(
 export function ref<T>(value: T): Ref<UnwrapRef<T>>
 export function ref<T = any>(): Ref<T | undefined>
 export function ref(value?: unknown) {
+  // ref创建的对象默认就是深度监听的
   return createRef(value, false)
 }
 
@@ -87,6 +89,7 @@ export function shallowRef(value?: unknown) {
 }
 
 function createRef(rawValue: unknown, shallow: boolean) {
+  // 如果本身就已经是ref对象，直接返回
   if (isRef(rawValue)) {
     return rawValue
   }
@@ -106,6 +109,7 @@ class RefImpl<T> {
   }
 
   get value() {
+    // 跟踪依赖啦
     trackRefValue(this)
     return this._value
   }

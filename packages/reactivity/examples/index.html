@@ -9,7 +9,7 @@
 <body>
     <script src="../dist/reactivity.global.js"></script>
     <script>
-        const { reactive, effect } = VueReactivity
+        const { reactive, effect, ref } = VueReactivity
         
         const obj = reactive({
             a: {
@@ -25,10 +25,24 @@
             }
         })
 
-        effect(() => {
-            console.log(obj.b.obj)
+        const levi = ref({
+            a: 1,
+            b: 2
         })
-        // console.log(obj.b.obj)
+        effect(() => {
+            console.log(levi.value.a)
+        })
+        setInterval(() => {
+            levi.value.a++
+        }, 2000)
+
+        // effect(() => {
+        //     console.log(obj.b.obj.z)
+        // })
+        // setInterval(() => {
+        //     obj.b.obj.z++
+        // }, 2000)
+        // // console.log(obj.b.obj)
     </script>
 </body>
 </html>
