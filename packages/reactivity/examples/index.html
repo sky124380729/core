@@ -30,10 +30,25 @@
             b: 2
         })
         effect(() => {
-            console.log(levi.value.a)
+            // console.log(levi.value.a, 'a1')
+            effect(() => {
+                // console.log(levi.value.b, 'b2')
+                effect(() => {
+                    console.log(levi.value.b, 'b3')
+                })
+            })
+        })
+        effect(() => {
+            // console.log(levi.value.a, 'a1')
+            effect(() => {
+                // console.log(levi.value.b, 'b2')
+                effect(() => {
+                    console.log(levi.value.b, 'b3')
+                })
+            })
         })
         setInterval(() => {
-            levi.value.a++
+            levi.value.b++
         }, 2000)
 
         // effect(() => {

@@ -29,6 +29,14 @@ type RefBase<T> = {
 }
 
 export function trackRefValue(ref: RefBase<any>) {
+  /**
+   * shouldTrack 是一个全局变量，代表当前是否需要 track 收集依赖
+   * activeEffect 也是个全局变量，代表当前的副作用对象 ReactiveEffect
+   * 为什么需要判断这两个变量确定是否收集依赖？
+   * 不是任何情况ref被访问时，都需要手机依赖
+   * - 没有被effect包裹，由于没有副作用函数(即没有依赖，activeEffect === undefined)，不应该收集依赖
+   * - 某些特殊情况，即使包裹在effect，也不应该收集依赖(即shoudTrack === false)，如组件声明周期执行，组件setup执行
+   */
   if (shouldTrack && activeEffect) {
     ref = toRaw(ref)
     if (__DEV__) {
@@ -44,6 +52,9 @@ export function trackRefValue(ref: RefBase<any>) {
 }
 
 export function triggerRefValue(ref: RefBase<any>, newVal?: any) {
+  // ref 可能是 reactive 对象的某个属性的值
+  // 这时候在 triggerRefValue(this, newVal) 时取 this，拿到的是一个 reactive 对象
+  // 需要获取 Proxy 代理背后的真实值 ref 对象
   ref = toRaw(ref)
   if (ref.dep) {
     if (__DEV__) {
@@ -107,7 +118,10 @@ class RefImpl<T> {
     this._rawValue = __v_isShallow ? value : toRaw(value)
     this._value = __v_isShallow ? value : toReactive(value)
   }
-
+  /**
+   * 收集依赖，就是把 activeEffect（当前的副作用对象），保存到 ref.dep 中（当触发依赖时，遍历 ref.dep 执行 effect ）
+   * 然后把 ref.dep，也保存到 effect.deps 中（用于在触发依赖后， ref.dep.delete(effect)，双向删除依赖）
+   */
   get value() {
     // 跟踪依赖啦
     trackRefValue(this)

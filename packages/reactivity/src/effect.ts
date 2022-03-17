@@ -19,15 +19,18 @@ type KeyToDepMap = Map<any, Dep>
 const targetMap = new WeakMap<any, KeyToDepMap>()
 
 // The number of effects currently being tracked recursively.
-// 当前副作用被递归跟踪的次数
+// 当前 effect 的嵌套深度，每次执行会 ++effectTrackDepth
 let effectTrackDepth = 0
 
+// 位运算操作的第 trackOpBit 位
 export let trackOpBit = 1
 
 /**
- * 按位跟踪标记最多支持30级递归
- * 这个值是为了使现代JS能够在所有平台上使用SMI
- * 当递归超过这个深度的时候，回退使用完全清理
+ * 按位跟踪标记最多支持30级递归，即最多支持30层effect嵌套
+ * 这个值是为了使现代JS能够在所有平台上使用SMI，深度受存储类型的位数限制，否则就会溢出。
+ * 在JavaScript内部，数值都是以64位浮点数的形式储存，但是做位运算的时候，是以32位带符号的整数进行运算的，并且返回值也是一个32位带符号的整数。
+ * 当递归超过这个深度的时候，回退使用完全清理，完全清理就是3.2之前的方案，收集依赖之前会把所有依赖都先清理掉
+ * https://mp.weixin.qq.com/s/AtRNE7OINOaIKkFpJmbk4A
  * The bitwise track markers support at most 30 levels of recursion.
  * This value is chosen to enable modern JS engines to use a SMI on all platforms.
  * When recursion depth is greater, fall back to using a full cleanup.
@@ -53,7 +56,17 @@ export let activeEffect: ReactiveEffect | undefined
 
 export const ITERATE_KEY = Symbol(__DEV__ ? 'iterate' : '')
 export const MAP_KEY_ITERATE_KEY = Symbol(__DEV__ ? 'Map key iterate' : '')
-
+/**
+ * 如果当前深度不超过 30，使用优化方案
+ * - 执行副作用函数前，给 ReactiveEffect 依赖的响应式变量，加上 was 的标记（was 是 vue 给的名称，表示过去依赖）
+ * - 执行 this.fn()，track 重新收集依赖时，给 ReactiveEffect 的每个依赖，加上 new 的标记
+ * - 对失效依赖进行删除（有 was 但是没有 new）
+ * -恢复上一个深度的状态
+ * 如果深度超过 30 ，超过部分，使用降级方案：
+ * - 双向删除 ReactiveEffect 副作用对象的所有依赖（effect.deps.length = 0）
+ * - 执行 this.fn()，track 重新收集依赖时
+ * - 恢复上一个深度的状态
+ */
 export class ReactiveEffect<T = any> {
   active = true
   deps: Dep[] = []
@@ -99,22 +112,28 @@ export class ReactiveEffect<T = any> {
       this.parent = activeEffect
       activeEffect = this
       shouldTrack = true
-
+      // 每次执行 effect 副作用函数前，全局变量嵌套深度会自增 1，执行完成 effect 副作用函数后会自减
       trackOpBit = 1 << ++effectTrackDepth
-
+      // 正常情况下使用优化方案，极端情况下，使用降级方案，也就是使用完全清除之前依赖的方式
       if (effectTrackDepth <= maxMarkerBits) {
+        // 标记所有的dep为was
         initDepMarkers(this)
       } else {
+        // 降级方案，删除所有的依赖，再重新收集依赖
         cleanupEffect(this)
       }
+      // 执行过程中标记新的dep为new
       return this.fn()
     } finally {
       if (effectTrackDepth <= maxMarkerBits) {
+        // 对失效依赖进行删除
         finalizeDepMarkers(this)
       }
-
+      // 恢复上一次的状态
+      // 嵌套深度 effectTrackDepth 自减
+      // 重置操作的位数
       trackOpBit = 1 << --effectTrackDepth
-
+      // 恢复上一个 activeEffect
       activeEffect = this.parent
       shouldTrack = lastShouldTrack
       this.parent = undefined
@@ -252,13 +271,15 @@ export function trackEffects(
   } else {
     // Full cleanup mode.
     // 否则采用完全清理模式
-    // 如果没有副作用effect，则表示需要track
+    // 如果activeEffect没有被收集过，则应当收集
     shouldTrack = !dep.has(activeEffect!)
   }
 
   if (shouldTrack) {
-    // 添加依赖
+    // 添加依赖，将effect存储到dep
     dep.add(activeEffect!)
+    // 同时effect也记录一下dep
+    // 用于trigger触发effect后，删除dep里面对应的effect，即dep.delete(activeEffect)
     activeEffect!.deps.push(dep)
     if (__DEV__ && activeEffect!.onTrack) {
       activeEffect!.onTrack(
@@ -365,7 +386,17 @@ export function triggerEffects(
   debuggerEventExtraInfo?: DebuggerEventExtraInfo
 ) {
   // spread into array for stabilization
+  // 循环遍历 dep，去取每个依赖的副作用对象 ReactiveEffect
   for (const effect of isArray(dep) ? dep : [...dep]) {
+    /**
+     * 默认不允许递归，即当前 effect 副作用函数，如果递归触发当前 effect，会被忽略
+     * 为什么默认不允许递归？
+     * const foo = ref([])
+     * effect(()=>{
+     *     foo.value.push(1)
+     * })
+     * 在这个副作用函数中，即会使用到 foo.value（getter 收集依赖），又会修改 foo 数组（触发依赖）。如果允许递归，会无限循环。
+     */
     if (effect !== activeEffect || effect.allowRecurse) {
       if (__DEV__ && effect.onTrigger) {
         effect.onTrigger(extend({ effect }, debuggerEventExtraInfo))
